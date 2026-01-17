@@ -52,7 +52,6 @@ import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { leadSourceLabels, leadCategoryLabels, leadSubcategoryLabels } from "@/data/mockData"
-import { StageBadge, PriorityBadge } from "@/components/ui/stage-badge"
 import type { Lead, LeadStage, LeadPriority, LeadSource, Caller } from "@/types/crm"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -70,6 +69,7 @@ import { fetchLeads, fetchCallers, createLead, updateLead, deleteLead, mergeDupl
 import { useAuth } from "@/contexts/AuthContext"
 import { AdvancedStageSelector } from "@/components/leads/AdvancedStageSelector"
 import { AdvancedPrioritySelector } from "@/components/leads/AdvancedPrioritySelector"
+import { MobileLeadsView } from "@/components/leads/MobileLeadsView"
 
 type DateFilter = "all" | "today" | "yesterday" | "last7days" | "last30days" | "thisMonth" | "custom"
 type SortField = "name" | "createdAt" | "value" | "priority"
@@ -146,6 +146,17 @@ const Leads = () => {
   })
   const { toast } = useToast()
   const { user } = useAuth()
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768) // md breakpoint
+    }
+
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile)
+  }, [])
 
   useEffect(() => {
     const loadData = async () => {
@@ -680,7 +691,7 @@ const Leads = () => {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto p-4 md:p-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
@@ -1113,7 +1124,21 @@ const Leads = () => {
 
         <DuplicateDetector leads={leads} onMergeDuplicates={handleMergeDuplicates} />
 
-        {viewMode === "list" ? (
+        {isMobile ? (
+          // Mobile view: Show simplified card layout
+          <div className="space-y-4">
+            {filteredLeads.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p className="text-lg font-medium">No leads found</p>
+                <p className="text-sm mt-1">Try adjusting your filters or add new leads</p>
+              </div>
+            ) : (
+              <MobileLeadsView leads={filteredLeads} onLeadClick={openLeadDetail} />
+            )}
+          </div>
+        ) : (
+          // Desktop view: Show original table layout
           <Card>
             <div className="overflow-x-auto">
               <Table>
@@ -1490,136 +1515,6 @@ const Leads = () => {
               )}
             </div>
           </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredLeads.map((lead) => {
-              const isOverdue = lead.nextFollowUp && new Date(lead.nextFollowUp) < new Date()
-              const isToday =
-                lead.nextFollowUp && new Date(lead.nextFollowUp).toDateString() === new Date().toDateString()
-
-              return (
-                <Card
-                  key={lead.id}
-                  className={cn(
-                    "hover:shadow-lg transition-all duration-200 hover:-translate-y-1 cursor-pointer",
-                    isOverdue && "border-l-4 border-destructive",
-                    getLeadAgeClass(lead.createdAt), // Use the new function here
-                  )}
-                  onClick={() => openLeadDetail(lead)}
-                >
-                  <CardContent className="p-5">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-accent flex items-center justify-center text-white text-xs font-semibold">
-                          {lead.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-foreground">{lead.name}</p>
-                          <p className="text-sm text-muted-foreground">{lead.city}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <PriorityBadge priority={lead.priority} size="sm" />
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="icon" className="h-8 w-8 bg-transparent">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openLeadDetail(lead)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              <span>View Details</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                window.open(`tel:${lead.phone}`)
-                              }}
-                            >
-                              <Phone className="mr-2 h-4 w-4 text-success" />
-                              <span>Call</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                window.open(`https://wa.me/${lead.phone.replace(/\s/g, "")}`)
-                              }}
-                            >
-                              <MessageCircle className="mr-2 h-4 w-4 text-success" />
-                              <span>WhatsApp</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => handleDeleteLead(lead.id, e)}>
-                              <Trash2 className="mr-2 h-4 w-4 text-destructive" />
-                              <span>Delete</span>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      {/* Removed: Value, Source, Category, Subcategory */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Stage</span>
-                        <StageBadge stage={lead.stage} size="sm" />
-                      </div>
-                      {lead.nextFollowUp && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">Follow-up</span>
-                          <span
-                            className={cn(
-                              "text-sm font-medium",
-                              isOverdue ? "text-destructive" : isToday ? "text-success" : "text-foreground",
-                            )}
-                          >
-                            {format(parseISO(lead.nextFollowUp), "dd MMM yyyy")}
-                          </span>
-                        </div>
-                      )}
-                      {lead.notes && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">Notes</span>
-                          <p className="text-sm text-foreground line-clamp-1 max-w-[180px]">{lead.notes}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div
-                      className="flex items-center gap-2 mt-4 pt-4 border-t border-border"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 gap-1 bg-transparent"
-                        onClick={() => window.open(`tel:${lead.phone}`)}
-                      >
-                        <Phone className="w-4 h-4" />
-                        Call
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 gap-1 bg-transparent"
-                        onClick={() => window.open(`https://wa.me/${lead.phone.replace(/\s/g, "")}`)}
-                      >
-                        <MessageCircle className="w-4 h-4" />
-                        WhatsApp
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-            {filteredLeads.length === 0 && (
-              <div className="col-span-full text-center py-12 text-muted-foreground">
-                <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p className="text-lg font-medium">No leads found</p>
-                <p className="text-sm mt-1">Try adjusting your filters or add new leads</p>
-              </div>
-            )}
-          </div>
         )}
 
         <ImportLeadsDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} onImport={handleImportLeads} />
